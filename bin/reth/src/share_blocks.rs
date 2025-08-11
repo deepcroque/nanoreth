@@ -1,15 +1,11 @@
 use clap::Args;
-use once_cell::sync::Lazy;
 use reth_hlfs::{Backfiller, Client, Server};
 use reth_network_api::{events::NetworkEvent, FullNetwork};
 use std::{
     collections::HashSet,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 use tokio::{task::JoinHandle, time::timeout};
@@ -18,10 +14,8 @@ use tracing::{debug, info, warn};
 // use futures_util::StreamExt;
 use futures_util::stream::StreamExt;
 
-static RR: Lazy<AtomicUsize> = Lazy::new(|| AtomicUsize::new(0));
-
 #[derive(Args, Clone, Debug)]
-pub struct ShareBlocksArgs {
+pub(crate) struct ShareBlocksArgs {
     #[arg(long, default_value_t = false)]
     pub share_blocks: bool,
     #[arg(long, default_value = "0.0.0.0")]
@@ -34,14 +28,17 @@ pub struct ShareBlocksArgs {
     pub hist_threshold: u64,
 }
 
-pub struct ShareBlocks {
-    pub backfiller: Backfiller,
+pub(crate) struct ShareBlocks {
+    pub(crate) _backfiller: Backfiller,
     _server: JoinHandle<()>,
     _autodetect: JoinHandle<()>,
 }
 
 impl ShareBlocks {
-    pub async fn start_with_network<Net>(args: &ShareBlocksArgs, network: Net) -> eyre::Result<Self>
+    pub(crate) async fn start_with_network<Net>(
+        args: &ShareBlocksArgs,
+        network: Net,
+    ) -> eyre::Result<Self>
     where
         Net: FullNetwork + Clone + 'static,
     {
@@ -64,12 +61,13 @@ impl ShareBlocks {
         let _autodetect = spawn_autodetect(network, args.share_blocks_port, bf.clone());
 
         info!(%bind, dir=%args.archive_dir.display(), hist_threshold=%args.hist_threshold, "hlfs: enabled (reth peers)");
-        Ok(Self { backfiller: bf, _server, _autodetect })
+        Ok(Self { _backfiller: bf, _server, _autodetect })
     }
 
-    pub async fn try_fetch_one(&self, block: u64, head: u64) -> eyre::Result<Option<usize>> {
-        let rr = RR.fetch_add(1, Ordering::Relaxed);
-        self.backfiller.fetch_if_missing(block, head, rr).await.map_err(|e| eyre::eyre!(e))
+    #[allow(dead_code)]
+    pub(crate) async fn try_fetch_one(&self, block: u64, head: u64) -> eyre::Result<Option<usize>> {
+        let rr = (block as usize) ^ (head as usize); // deterministic round-robin seed
+        self._backfiller.fetch_if_missing(block, head, rr).await.map_err(|e| eyre::eyre!(e))
         // <- fix: HlfsError -> eyre::Report
     }
 }
