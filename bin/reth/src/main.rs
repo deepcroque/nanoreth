@@ -6,6 +6,7 @@ static ALLOC: reth_cli_util::allocator::Allocator = reth_cli_util::allocator::ne
 mod block_ingest;
 mod call_forwarder;
 mod serialized;
+mod share_blocks;
 mod spot_meta;
 mod tx_forwarder;
 
@@ -18,6 +19,7 @@ use reth::cli::Cli;
 use reth_ethereum_cli::chainspec::EthereumChainSpecParser;
 use reth_hyperliquid_types::PrecompilesCache;
 use reth_node_ethereum::EthereumNode;
+use share_blocks::ShareBlocksArgs;
 use tokio::sync::Mutex;
 use tracing::info;
 use tx_forwarder::EthForwarderApiServer;
@@ -40,6 +42,10 @@ struct HyperliquidExtArgs {
     /// 3. filters out logs and transactions from subscription.
     #[arg(long, default_value = "false")]
     pub hl_node_compliant: bool,
+
+    /// Enable hlfs to backfill archive blocks
+    #[command(flatten)]
+    pub hlfs: ShareBlocksArgs,
 }
 
 fn main() {
@@ -84,6 +90,14 @@ fn main() {
                 })
                 .launch()
                 .await?;
+
+            // start HLFS (serve + peer-backed backfill) using the node's network
+            if ext_args.hlfs.share_blocks {
+                let net = handle.node.network.clone(); // returns a FullNetwork (NetworkHandle under the hood)
+                                                         // keep handle alive for the whole process
+                let _hlfs =
+                    share_blocks::ShareBlocks::start_with_network(&ext_args.hlfs, net).await?;
+            }
 
             let ingest =
                 BlockIngest { ingest_dir, local_ingest_dir, local_blocks_cache, precompiles_cache };
