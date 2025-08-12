@@ -240,19 +240,21 @@ impl Backfiller {
         head: u64,
         rr_index: usize,
     ) -> Result<Option<usize>, HlfsError> {
-        if number + self.hist_threshold > head {
+        if head >= self.hist_threshold && number + self.hist_threshold > head {
             return Ok(None);
         }
-        let path = self.root.join(format!("{number}.rlp"));
+        let f = ((number - 1) / 1_000_000) * 1_000_000;
+        let s = ((number - 1) / 1_000) * 1_000;
+        let path = format!("{}/{f}/{s}/{number}.rmp.lz4", self.root.to_string_lossy());
         if fs::try_exists(&path).await? {
             return Ok(None);
         }
         match self.client.get_block(number, rr_index).await {
             Ok(bytes) => {
-                let tmp = self.root.join(format!("{number}.rlp.part"));
+                let tmp = format!("{}/{f}/{s}/{number}.rlp.lz4.part", self.root.to_string_lossy());
                 fs::write(&tmp, &bytes).await?;
                 fs::rename(&tmp, &path).await?;
-                info!(block=number, bytes=bytes.len(), path=%path.display(), "hlfs: wrote");
+                info!(block=number, bytes=bytes.len(), path=%path, "hlfs: wrote");
                 Ok(Some(bytes.len()))
             }
             Err(e) => {

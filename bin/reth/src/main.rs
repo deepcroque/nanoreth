@@ -92,15 +92,23 @@ fn main() {
                 .await?;
 
             // start HLFS (serve + peer-backed backfill) using the node's network
-            if ext_args.hlfs.share_blocks {
-                let net = handle.node.network.clone(); // returns a FullNetwork (NetworkHandle under the hood)
-                                                         // keep handle alive for the whole process
-                let _hlfs =
-                    share_blocks::ShareBlocks::start_with_network(&ext_args.hlfs, net).await?;
-            }
+            let hlfs = if ext_args.hlfs.share_blocks {
+                let net = handle.node.network.clone();
+                Some(
+                    crate::share_blocks::ShareBlocks::start_with_network(&ext_args.hlfs, net)
+                        .await?,
+                )
+            } else {
+                None
+            };
 
-            let ingest =
-                BlockIngest { ingest_dir, local_ingest_dir, local_blocks_cache, precompiles_cache };
+            let ingest = BlockIngest {
+                ingest_dir,
+                local_ingest_dir,
+                local_blocks_cache,
+                precompiles_cache,
+                hlfs,
+            };
             ingest.run(handle.node).await.unwrap();
             handle.node_exit_future.await
         },
