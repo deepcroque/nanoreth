@@ -150,7 +150,7 @@ fn date_from_datetime(dt: OffsetDateTime) -> String {
 }
 
 impl BlockIngest {
-    pub(crate) async fn collect_block(&self, height: u64) -> Option<BlockAndReceipts> {
+    pub(crate) async fn collect_block(&self, head: u64, height: u64) -> Option<BlockAndReceipts> {
         // info!("Attempting to collect block @ height [{height}]");
 
         // Not a one liner (using .or) to include logs
@@ -160,8 +160,7 @@ impl BlockIngest {
         }
 
         if let Some(hlfs) = &self.hlfs {
-            let u_cache = self.local_blocks_cache.lock().await;
-            let head = u_cache.keys().next_back().copied().unwrap_or(0);
+            //info!("!! HEIGHT [{height}] :: HEAD [{head}]");
             if hlfs.try_fetch_one(height, head).await.ok().flatten().is_some() {
                 if let Some(block) = self.try_collect_local_block(height).await {
                     info!("Returning HLFS-fetched block @[{height}]");
@@ -299,7 +298,7 @@ impl BlockIngest {
         self.start_local_ingest_loop(height, current_block_timestamp).await;
 
         loop {
-            let Some(original_block) = self.collect_block(height).await else {
+            let Some(original_block) = self.collect_block(head, height).await else {
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;
                 continue;
             };

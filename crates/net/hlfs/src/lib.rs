@@ -192,9 +192,13 @@ async fn handle_conn(
     let mut nb = [0u8; 8];
     sock.read_exact(&mut nb).await?;
     let number = u64::from_le_bytes(nb);
-    let path = root.join(format!("{number}.rlp"));
+    let n = number.saturating_sub(1); // 0 -> 0, others -> number-1
+    let f = (n / 1_000_000) * 1_000_000;
+    let s = (n / 1_000) * 1_000;
+    let path = format!("{}/{f}/{s}/{number}.rmp.lz4", root.to_string_lossy());
     match fs::read(&path).await {
         Ok(data) => {
+            debug!("hlfs: found path [{path}]");
             let mut b = BytesMut::with_capacity(1 + 8 + 4 + data.len());
             b.put_u8(0x02);
             put_u64(&mut b, number);
@@ -241,17 +245,21 @@ impl Backfiller {
         rr_index: usize,
     ) -> Result<Option<usize>, HlfsError> {
         if head >= self.hist_threshold && number + self.hist_threshold > head {
+            //debug!(block=number, "hlfs: skip");
             return Ok(None);
         }
-        let f = ((number - 1) / 1_000_000) * 1_000_000;
-        let s = ((number - 1) / 1_000) * 1_000;
+        let n = number.saturating_sub(1); // 0 -> 0, others -> number-1
+        let f = (n / 1_000_000) * 1_000_000;
+        let s = (n / 1_000) * 1_000;
+
         let path = format!("{}/{f}/{s}/{number}.rmp.lz4", self.root.to_string_lossy());
         if fs::try_exists(&path).await? {
             return Ok(None);
         }
+        debug!(block = number, "hlfs: going to get_block from client");
         match self.client.get_block(number, rr_index).await {
             Ok(bytes) => {
-                let tmp = format!("{}/{f}/{s}/{number}.rlp.lz4.part", self.root.to_string_lossy());
+                let tmp = format!("{}/{f}/{s}/{number}.rmp.lz4.part", self.root.to_string_lossy());
                 fs::write(&tmp, &bytes).await?;
                 fs::rename(&tmp, &path).await?;
                 info!(block=number, bytes=bytes.len(), path=%path, "hlfs: wrote");
