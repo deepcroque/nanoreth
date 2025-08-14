@@ -58,7 +58,7 @@ impl ShareBlocks {
         let client = Client::new(Vec::new()).with_timeout(Duration::from_secs(5));
         let bf = Backfiller::new(client, &args.archive_dir, args.hist_threshold);
 
-        let _autodetect = spawn_autodetect(network, args.share_blocks_port, bf.clone());
+        let _autodetect = spawn_autodetect(network, host, args.share_blocks_port, bf.clone());
 
         info!(%bind, dir=%args.archive_dir.display(), hist_threshold=%args.hist_threshold, "hlfs: enabled (reth peers)");
         Ok(Self { _backfiller: bf, _server, _autodetect })
@@ -72,7 +72,12 @@ impl ShareBlocks {
     }
 }
 
-fn spawn_autodetect<Net>(network: Net, hlfs_port: u16, backfiller: Backfiller) -> JoinHandle<()>
+fn spawn_autodetect<Net>(
+    network: Net,
+    self_ip: IpAddr,
+    hlfs_port: u16,
+    backfiller: Backfiller,
+) -> JoinHandle<()>
 where
     Net: FullNetwork + Clone + 'static,
 {
@@ -84,6 +89,12 @@ where
         loop {
             match events.next().await {
                 Some(NetworkEvent::ActivePeerSession { info, .. }) => {
+                    let ip = info.remote_addr.ip();
+                    // skip unusable/self
+                    if ip.is_unspecified() || ip == self_ip {
+                        debug!(%ip, "hlfs: skip self/unspecified");
+                        continue;
+                    }
                     let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
                     if probe_hlfs(addr).await {
                         let mut g = good.lock().await;
