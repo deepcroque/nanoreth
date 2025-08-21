@@ -16,7 +16,19 @@ Building NanoReth from source requires Rust and Cargo to be installed:
 
 ## How to run (mainnet)
 
-1) `$ aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks --request-payer requester # one-time` - this will backfill the existing blocks from HyperLiquid's EVM S3 bucket.
+The current state of the block files comprise of millions of small objects totalling over 20 Gigs and counting. The "requester pays" option means you will need a configured aws environment, and you could incur charges which varies according to destination (ec2 versus local).
+
+1) this will backfill the existing blocks from HyperLiquid's EVM S3 bucket:
+
+    ```shell                                  
+    aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks \
+      --request-payer requester \
+      --exact-timestamps \                  
+      --size-only \                        
+      --page-size 1000 \                        
+      --only-show-errors
+    ```
+    > consider using this [rust based s3 tool wrapper](https://github.com/wwwehr/hl-evm-block-sync) alternative to optimize your download experience
 
 2) `$ make install` - this will install the NanoReth binary.
 
@@ -65,11 +77,24 @@ $ reth node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
 
 Testnet is supported since block 21304281.
 
+> [!NOTE]
+> To run testnet locally, you will need:
+> - [ ] [git lfs](https://git-lfs.com/)
+> - [ ] [rust toolchain](https://rustup.rs/)
+
 ```sh
 # Get testnet genesis at block 21304281
 $ cd ~
 $ git clone https://github.com/sprites0/hl-testnet-genesis
+$ git lfs pull
 $ zstd --rm -d ~/hl-testnet-genesis/*.zst
+
+# Now return to where you have cloned this project to continue
+$ cd -
+
+# prepare your rust toolchain
+$ rustup install 1.82 # (this corresponds with rust version in our Cargo.toml)
+$ rustup default 1.82
 
 # Init node
 $ make install
