@@ -91,8 +91,12 @@ where
                 Some(NetworkEvent::ActivePeerSession { info, .. }) => {
                     let ip = info.remote_addr.ip();
                     // skip unusable/self
-                    if ip.is_unspecified() || ip == self_ip {
-                        debug!(%ip, "hlfs: skip self/unspecified");
+                    if ip.is_unspecified() {
+                        debug!(%ip, "hlfs: skip unspecified");
+                        continue;
+                    }
+                    if ip == self_ip {
+                        debug!(%ip, "hlfs: skip self");
                         continue;
                     }
                     let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
