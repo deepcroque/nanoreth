@@ -1,5 +1,5 @@
 use clap::Args;
-use reth_hlfs::{Backfiller, Client, Server};
+use reth_hlfs::{Backfiller, Client, Server, OP_REQ_MAX_BLOCK, OP_RES_MAX_BLOCK, PeerRecord};
 use reth_network_api::{events::NetworkEvent, FullNetwork};
 use std::{
     collections::HashSet,
@@ -24,8 +24,6 @@ pub(crate) struct ShareBlocksArgs {
     pub share_blocks_port: u16,
     #[arg(long, default_value = "evm-blocks")]
     pub archive_dir: PathBuf,
-    #[arg(long, default_value_t = 5_000)]
-    pub hist_threshold: u64,
 }
 
 pub(crate) struct ShareBlocks {
@@ -55,19 +53,19 @@ impl ShareBlocks {
             }
         });
 
-        let client = Client::new(Vec::new()).with_timeout(Duration::from_secs(5));
-        let bf = Backfiller::new(client, &args.archive_dir, args.hist_threshold);
+        let client = Client::new(&args.archive_dir, Vec::new()).with_timeout(Duration::from_secs(5));
+        let bf = Backfiller::new(client, &args.archive_dir);
 
         let _autodetect = spawn_autodetect(network, host, args.share_blocks_port, bf.clone());
 
-        info!(%bind, dir=%args.archive_dir.display(), hist_threshold=%args.hist_threshold, "hlfs: enabled (reth peers)");
+        info!(%bind, dir=%args.archive_dir.display(), "hlfs: enabled (reth peers)");
         Ok(Self { _backfiller: bf, _server, _autodetect })
     }
 
     #[allow(dead_code)]
-    pub(crate) async fn try_fetch_one(&self, block: u64, head: u64) -> eyre::Result<Option<usize>> {
-        let rr = (block as usize) ^ (head as usize); // deterministic round-robin seed
-        self._backfiller.fetch_if_missing(block, head, rr).await.map_err(|e| eyre::eyre!(e))
+    pub(crate) async fn try_fetch_one(&self, block: u64) -> eyre::Result<Option<usize>> {
+        let rr = block as usize;
+        self._backfiller.fetch_if_missing(block, rr).await.map_err(|e| eyre::eyre!(e))
         // <- fix: HlfsError -> eyre::Report
     }
 }
@@ -81,8 +79,7 @@ fn spawn_autodetect<Net>(
 where
     Net: FullNetwork + Clone + 'static,
 {
-    let good: Arc<tokio::sync::Mutex<HashSet<SocketAddr>>> =
-        Arc::new(tokio::sync::Mutex::new(HashSet::new()));
+    let good: Arc<tokio::sync::Mutex<HashSet<PeerRecord>>> = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
 
     tokio::spawn(async move {
         let mut events = network.event_listener();
@@ -90,7 +87,6 @@ where
             match events.next().await {
                 Some(NetworkEvent::ActivePeerSession { info, .. }) => {
                     let ip = info.remote_addr.ip();
-                    // skip unusable/self
                     if ip.is_unspecified() {
                         debug!(%ip, "hlfs: skip unspecified");
                         continue;
@@ -100,9 +96,9 @@ where
                         continue;
                     }
                     let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
-                    if probe_hlfs(addr).await {
+                    if let max_block = probe_hlfs(addr).await {
                         let mut g = good.lock().await;
-                        if g.insert(addr) {
+                        if g.insert(PeerRecord { addr, max_block }) {
                             let v: Vec<_> = g.iter().copied().collect();
                             backfiller.set_peers(v.clone());
                             info!(%addr, total=v.len(), "hlfs: peer added");
@@ -121,22 +117,35 @@ where
     })
 }
 
-async fn probe_hlfs(addr: SocketAddr) -> bool {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpStream;
+pub async fn probe_hlfs(addr: SocketAddr) -> u64 {
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpStream,
+    };
 
-    let res = timeout(Duration::from_secs(2), async {
-        if let Ok(mut s) = TcpStream::connect(addr).await {
-            let mut msg = [0u8; 9];
-            msg[0] = 0x01;
-            let _ = s.write_all(&msg).await;
-            let mut op = [0u8; 1];
-            if s.read_exact(&mut op).await.is_ok() {
-                return matches!(op[0], 0x02 | 0x03 | 0x04);
-            }
+    let fut = async {
+        let mut s = TcpStream::connect(addr).await.ok()?;
+
+        // send [OP][8 zero bytes]
+        let mut msg = [0u8; 9];
+        msg[0] = OP_REQ_MAX_BLOCK;
+        s.write_all(&msg).await.ok()?;
+
+        // read 1-byte opcode
+        let mut op = [0u8; 1];
+        s.read_exact(&mut op).await.ok()?;
+        if op[0] != OP_RES_MAX_BLOCK {
+            return None;
         }
-        false
-    })
-    .await;
-    matches!(res, Ok(true))
+
+        // read 8-byte little-endian block number
+        let mut blk = [0u8; 8];
+        s.read_exact(&mut blk).await.ok()?;
+        Some(u64::from_le_bytes(blk))
+    };
+
+    match timeout(Duration::from_secs(2), fut).await {
+        Ok(Some(n)) => n,
+        _ => 0,
+    }
 }
