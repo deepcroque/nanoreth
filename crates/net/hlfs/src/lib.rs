@@ -91,6 +91,7 @@ impl Client {
     pub fn new(root: impl Into<PathBuf>, peers: Vec<PeerRecord>) -> Self {
         let root: PathBuf = root.into();
         let n = find_max_number_file(&root).unwrap();
+        debug!(max_block = n, "hlfs: our archive");
         Self {
             root,
             peers: Arc::new(Mutex::new(peers)),

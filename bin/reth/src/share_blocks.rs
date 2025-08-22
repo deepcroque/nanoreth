@@ -96,12 +96,13 @@ where
                         continue;
                     }
                     let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
-                    if let max_block = probe_hlfs(addr).await {
+                    let max_block = probe_hlfs(addr).await;
+                    if max_block != 0 {
                         let mut g = good.lock().await;
                         if g.insert(PeerRecord { addr, max_block }) {
                             let v: Vec<_> = g.iter().copied().collect();
                             backfiller.set_peers(v.clone());
-                            info!(%addr, total=v.len(), "hlfs: peer added");
+                            info!(%addr, %max_block, total=v.len(), "hlfs: peer added");
                         }
                     } else {
                         debug!(%addr, "hlfs: peer has no HLFS");
@@ -117,7 +118,7 @@ where
     })
 }
 
-pub async fn probe_hlfs(addr: SocketAddr) -> u64 {
+pub(crate) async fn probe_hlfs(addr: SocketAddr) -> u64 {
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
