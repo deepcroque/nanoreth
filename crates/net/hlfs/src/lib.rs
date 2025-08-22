@@ -91,7 +91,12 @@ impl Client {
     pub fn new(root: impl Into<PathBuf>, peers: Vec<PeerRecord>) -> Self {
         let root: PathBuf = root.into();
         let n = find_max_number_file(&root).unwrap();
-        Self { root, peers: Arc::new(Mutex::new(peers)), timeout: Duration::from_secs(3), max_block: n }
+        Self {
+            root,
+            peers: Arc::new(Mutex::new(peers)),
+            timeout: Duration::from_secs(3),
+            max_block: n,
+        }
     }
     pub fn update_peers(&self, peers: Vec<PeerRecord>) {
         *self.peers.lock() = peers;
@@ -187,7 +192,7 @@ fn find_max_number_file(root: &Path) -> Result<u64> {
         Ok(())
     }
 
-    let mut best = None;
+    let mut best = Some(0);
     walk(root, &mut best)?;
     Ok(best.expect("cannot find block files"))
 }
@@ -253,9 +258,17 @@ async fn handle_conn(
 ) -> Result<(), HlfsError> {
     let mut op = [0u8; 1];
     sock.read_exact(&mut op).await?;
-    if op[0] != OP_REQ_BLOCK {
+    if op[0] != OP_REQ_BLOCK && op[0] != OP_REQ_MAX_BLOCK {
         warn!(%addr, "hlfs: bad op");
         return Err(HlfsError::Proto);
+    }
+
+    if op[0] == OP_REQ_MAX_BLOCK {
+        let mut b = BytesMut::with_capacity(1 + 8);
+        b.put_u8(OP_RES_MAX_BLOCK);
+        put_u64(&mut b, max_block);
+        let _ = sock.write_all(&b).await;
+        return Ok(());
     }
 
     let mut num = [0u8; 8];
