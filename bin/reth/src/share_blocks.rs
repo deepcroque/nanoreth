@@ -60,10 +60,6 @@ impl ShareBlocks {
         Ok(Self { _server, _autodetect })
     }
 
-    // #[allow(dead_code)]
-    // pub(crate) async fn try_fetch_one(&self, block: u64) -> eyre::Result<Option<usize>> {
-    //     self._backfiller.fetch_if_missing(block).await.map_err(|e| eyre::eyre!(e))
-    // }
 }
 
 fn spawn_autodetect<Net>(
