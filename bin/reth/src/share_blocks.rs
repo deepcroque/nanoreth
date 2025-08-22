@@ -88,9 +88,10 @@ where
                 let mut bf = backfiller.lock().await;
                 if bf.client.max_block < bf.max_block_seen {
                     let block = bf.client.max_block + 1;
-                    let _ = bf.fetch_if_missing(block).await;
+                    let new_height = bf.fetch_if_missing(block).await.expect("new height");
+                    bf.client.max_block = new_height.unwrap();
                 }
-                sleep(Duration::from_secs(1)).await;
+                sleep(Duration::from_millis(50)).await;
             }
         }
     });

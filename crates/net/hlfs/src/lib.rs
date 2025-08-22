@@ -330,7 +330,7 @@ impl Backfiller {
     pub async fn fetch_if_missing(
         &mut self,
         number: u64,
-    ) -> Result<Option<usize>, HlfsError> {
+    ) -> Result<Option<u64>, HlfsError> {
         let rr_index = number as usize;
         let n = number.saturating_sub(1); // 0 -> 0, others -> number-1
         let f = (n / 1_000_000) * 1_000_000;
@@ -357,7 +357,7 @@ impl Backfiller {
                     return Ok(None);
                 }
                 debug!(block = number, "hlfs: got block");
-                Ok(Some(data.len()))
+                Ok(Some(number))
             }
         }
     }
