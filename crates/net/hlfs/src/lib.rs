@@ -83,9 +83,9 @@ impl Hash for PeerRecord {
 #[derive(Clone)]
 pub struct Client {
     root: PathBuf,
-    peers: Arc<Mutex<Vec<PeerRecord>>>,
+    pub peers: Arc<Mutex<Vec<PeerRecord>>>,
     timeout: Duration,
-    max_block: u64,
+    pub max_block: u64,
 }
 impl Client {
     pub fn new(root: impl Into<PathBuf>, peers: Vec<PeerRecord>) -> Self {
@@ -310,21 +310,28 @@ async fn handle_conn(
 /// Backfiller: ask client per missing block; rotate peers every block.
 #[derive(Clone)]
 pub struct Backfiller {
-    client: Client,
+    pub client: Client,
     root: PathBuf,
+    pub max_block_seen: u64,
 }
 impl Backfiller {
     pub fn new(client: Client, root: impl Into<PathBuf>) -> Self {
-        Self { client, root: root.into() }
+        Self { client, root: root.into(), max_block_seen: 0 }
     }
-    pub fn set_peers(&self, peers: Vec<PeerRecord>) {
+    pub fn set_peers(&mut self, peers: Vec<PeerRecord>) {
         self.client.update_peers(peers);
+        let _peers = self.client.peers.lock().clone();
+        for p in _peers {
+            if p.max_block > self.max_block_seen {
+                self.max_block_seen = p.max_block
+            }
+        }
     }
     pub async fn fetch_if_missing(
-        &self,
+        &mut self,
         number: u64,
-        rr_index: usize,
     ) -> Result<Option<usize>, HlfsError> {
+        let rr_index = number as usize;
         let n = number.saturating_sub(1); // 0 -> 0, others -> number-1
         let f = (n / 1_000_000) * 1_000_000;
         let s = (n / 1_000) * 1_000;

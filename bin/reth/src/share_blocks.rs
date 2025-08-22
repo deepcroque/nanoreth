@@ -1,14 +1,16 @@
 use clap::Args;
-use reth_hlfs::{Backfiller, Client, Server, OP_REQ_MAX_BLOCK, OP_RES_MAX_BLOCK, PeerRecord};
+use reth_hlfs::{Backfiller, Client, PeerRecord, Server, OP_REQ_MAX_BLOCK, OP_RES_MAX_BLOCK};
 use reth_network_api::{events::NetworkEvent, FullNetwork};
 use std::{
     collections::HashSet,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::Arc,
-    time::Duration,
 };
-use tokio::{task::JoinHandle, time::timeout};
+use tokio::{
+    task::JoinHandle,
+    time::{sleep, timeout, Duration},
+};
 use tracing::{debug, info, warn};
 
 // use futures_util::StreamExt;
@@ -27,7 +29,6 @@ pub(crate) struct ShareBlocksArgs {
 }
 
 pub(crate) struct ShareBlocks {
-    pub(crate) _backfiller: Backfiller,
     _server: JoinHandle<()>,
     _autodetect: JoinHandle<()>,
 }
@@ -53,65 +54,83 @@ impl ShareBlocks {
             }
         });
 
-        let client = Client::new(&args.archive_dir, Vec::new()).with_timeout(Duration::from_secs(5));
-        let bf = Backfiller::new(client, &args.archive_dir);
-
-        let _autodetect = spawn_autodetect(network, host, args.share_blocks_port, bf.clone());
+        let _autodetect = spawn_autodetect(network, host, args.share_blocks_port, args.archive_dir.clone());
 
         info!(%bind, dir=%args.archive_dir.display(), "hlfs: enabled (reth peers)");
-        Ok(Self { _backfiller: bf, _server, _autodetect })
+        Ok(Self { _server, _autodetect })
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn try_fetch_one(&self, block: u64) -> eyre::Result<Option<usize>> {
-        let rr = block as usize;
-        self._backfiller.fetch_if_missing(block, rr).await.map_err(|e| eyre::eyre!(e))
-        // <- fix: HlfsError -> eyre::Report
-    }
+    // #[allow(dead_code)]
+    // pub(crate) async fn try_fetch_one(&self, block: u64) -> eyre::Result<Option<usize>> {
+    //     self._backfiller.fetch_if_missing(block).await.map_err(|e| eyre::eyre!(e))
+    // }
 }
 
 fn spawn_autodetect<Net>(
     network: Net,
     self_ip: IpAddr,
     hlfs_port: u16,
-    backfiller: Backfiller,
+    archive_dir: PathBuf,
 ) -> JoinHandle<()>
 where
     Net: FullNetwork + Clone + 'static,
 {
-    let good: Arc<tokio::sync::Mutex<HashSet<PeerRecord>>> = Arc::new(tokio::sync::Mutex::new(HashSet::new()));
+    let client = Client::new(&archive_dir, Vec::new()).with_timeout(Duration::from_secs(5));
+    let backfiller = Arc::new(tokio::sync::Mutex::new(Backfiller::new(client, &archive_dir)));
+    let good: Arc<tokio::sync::Mutex<HashSet<PeerRecord>>> =
+        Arc::new(tokio::sync::Mutex::new(HashSet::new()));
 
-    tokio::spawn(async move {
-        let mut events = network.event_listener();
-        loop {
-            match events.next().await {
-                Some(NetworkEvent::ActivePeerSession { info, .. }) => {
-                    let ip = info.remote_addr.ip();
-                    if ip.is_unspecified() {
-                        debug!(%ip, "hlfs: skip unspecified");
-                        continue;
-                    }
-                    if ip == self_ip {
-                        debug!(%ip, "hlfs: skip self");
-                        continue;
-                    }
-                    let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
-                    let max_block = probe_hlfs(addr).await;
-                    if max_block != 0 {
-                        let mut g = good.lock().await;
-                        if g.insert(PeerRecord { addr, max_block }) {
-                            let v: Vec<_> = g.iter().copied().collect();
-                            backfiller.set_peers(v.clone());
-                            info!(%addr, %max_block, total=v.len(), "hlfs: peer added");
-                        }
-                    } else {
-                        debug!(%addr, "hlfs: peer has no HLFS");
-                    }
+    tokio::spawn({
+        let backfiller = backfiller.clone();
+        async move {
+            loop {
+                let mut bf = backfiller.lock().await;
+                warn!("hlfs: backfiller started");
+                if bf.client.max_block < bf.max_block_seen {
+                    let block = bf.client.max_block + 1;
+                    let _ = bf.fetch_if_missing(block).await;
                 }
-                Some(_) => {}
-                None => {
-                    warn!("hlfs: network event stream ended");
-                    break;
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    });
+
+    tokio::spawn({
+        let backfiller = backfiller.clone();
+        async move {
+            let mut events = network.event_listener();
+            loop {
+                let mut bf = backfiller.lock().await;
+                match events.next().await {
+                    Some(NetworkEvent::ActivePeerSession { info, .. }) => {
+                        let ip = info.remote_addr.ip();
+                        if ip.is_unspecified() {
+                            debug!(%ip, "hlfs: skip unspecified");
+                            continue;
+                        }
+                        if ip == self_ip {
+                            debug!(%ip, "hlfs: skip self");
+                            continue;
+                        }
+                        let addr = SocketAddr::new(info.remote_addr.ip(), hlfs_port);
+                        let max_block = probe_hlfs(addr).await;
+                        if max_block != 0 {
+                            let mut g = good.lock().await;
+                            if g.insert(PeerRecord { addr, max_block }) {
+                                let v: Vec<_> = g.iter().copied().collect();
+                                bf.set_peers(v.clone());
+                                info!(%addr, %max_block, total=v.len(), "hlfs: peer added");
+                            }
+                        } else {
+                            debug!(%addr, "hlfs: peer has no HLFS");
+                        }
+                    }
+                    Some(_) => {}
+                    None => {
+                        warn!("hlfs: network event stream ended");
+                        break;
+                    }
                 }
             }
         }

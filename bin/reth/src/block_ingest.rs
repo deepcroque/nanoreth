@@ -159,15 +159,15 @@ impl BlockIngest {
             return Some(block);
         }
 
-        if let Some(hlfs) = &self.hlfs {
-            //info!("!! HEIGHT [{height}] :: HEAD [{head}]");
-            if hlfs.try_fetch_one(height).await.ok().flatten().is_some() {
-                if let Some(block) = self.try_collect_local_block(height).await {
-                    info!("Returning HLFS-fetched block @[{height}]");
-                    return Some(block);
-                }
-            }
-        }
+        // if let Some(hlfs) = &self.hlfs {
+        //     //info!("!! HEIGHT [{height}] :: HEAD [{head}]");
+        //     if hlfs.try_fetch_one(height).await.ok().flatten().is_some() {
+        //         if let Some(block) = self.try_collect_local_block(height).await {
+        //             info!("Returning HLFS-fetched block @[{height}]");
+        //             return Some(block);
+        //         }
+        //     }
+        // }
 
         self.try_collect_s3_block(height)
     }
