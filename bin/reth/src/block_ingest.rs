@@ -286,7 +286,7 @@ impl BlockIngest {
         self.start_local_ingest_loop(height, current_block_timestamp).await;
 
         loop {
-            let Some(original_block) = self.collect_block(head).await else {
+            let Some(original_block) = self.collect_block(height).await else {
                 tokio::time::sleep(std::time::Duration::from_millis(25)).await;
                 continue;
             };
