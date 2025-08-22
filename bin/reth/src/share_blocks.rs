@@ -81,16 +81,15 @@ where
         Arc::new(tokio::sync::Mutex::new(HashSet::new()));
 
     tokio::spawn({
+        warn!("hlfs: backfiller started");
         let backfiller = backfiller.clone();
         async move {
             loop {
                 let mut bf = backfiller.lock().await;
-                warn!("hlfs: backfiller started");
                 if bf.client.max_block < bf.max_block_seen {
                     let block = bf.client.max_block + 1;
                     let _ = bf.fetch_if_missing(block).await;
                 }
-
                 sleep(Duration::from_secs(1)).await;
             }
         }

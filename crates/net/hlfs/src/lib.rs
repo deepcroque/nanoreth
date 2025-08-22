@@ -338,7 +338,7 @@ impl Backfiller {
 
         let path = format!("{}/{f}/{s}/{number}.rmp.lz4", self.root.to_string_lossy());
         if Path::new(&path).exists() {
-            trace!(block = number, "hlfs: already have");
+            debug!(block = number, "hlfs: already have");
             return Ok(None);
         }
         match self.client.wants_block(number, rr_index).await {
@@ -356,6 +356,7 @@ impl Backfiller {
                     warn!(%path, "hlfs: write failed: {e}");
                     return Ok(None);
                 }
+                debug!(block = number, "hlfs: got block");
                 Ok(Some(data.len()))
             }
         }
