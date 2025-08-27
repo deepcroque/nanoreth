@@ -25,7 +25,6 @@ The current state of the block files comprise of millions of small objects total
       --request-payer requester \
       --exact-timestamps \                  
       --size-only \                        
-      --page-size 1000 \                        
       --only-show-errors
     ```
     > consider using this [rust based s3 tool wrapper](https://github.com/wwwehr/hl-evm-block-sync) alternative to optimize your download experience
