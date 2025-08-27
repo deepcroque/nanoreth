@@ -194,7 +194,20 @@ fn find_max_number_file(root: &Path) -> Result<u64> {
     }
 
     let mut best = Some(0);
-    walk(root, &mut best)?;
+    let top: PathBuf = fs::read_dir(root)?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .filter_map(|e| {
+            let name = e.file_name();
+            let s = name.to_str()?;
+            let n: u64 = s.parse().ok()?;
+            Some((n, e.path()))
+        })
+        .max_by_key(|(n, _)| *n)
+        .map(|(_, p)| p)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no numeric top-level dirs"))?;
+
+    walk(&top, &mut best)?;
     Ok(best.expect("cannot find block files"))
 }
 
@@ -327,10 +340,7 @@ impl Backfiller {
             }
         }
     }
-    pub async fn fetch_if_missing(
-        &mut self,
-        number: u64,
-    ) -> Result<Option<u64>, HlfsError> {
+    pub async fn fetch_if_missing(&mut self, number: u64) -> Result<Option<u64>, HlfsError> {
         let rr_index = number as usize;
         let n = number.saturating_sub(1); // 0 -> 0, others -> number-1
         let f = (n / 1_000_000) * 1_000_000;

@@ -54,12 +54,12 @@ impl ShareBlocks {
             }
         });
 
-        let _autodetect = spawn_autodetect(network, host, args.share_blocks_port, args.archive_dir.clone());
+        let _autodetect =
+            spawn_autodetect(network, host, args.share_blocks_port, args.archive_dir.clone());
 
         info!(%bind, dir=%args.archive_dir.display(), "hlfs: enabled (reth peers)");
         Ok(Self { _server, _autodetect })
     }
-
 }
 
 fn spawn_autodetect<Net>(
