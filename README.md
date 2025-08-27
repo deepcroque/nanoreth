@@ -86,7 +86,7 @@ Testnet is supported since block 21304281.
 # Get testnet genesis at block 21304281
 $ cd ~
 $ git clone https://github.com/sprites0/hl-testnet-genesis
-$ git lfs pull
+$ git -C hl-testnet-genesis lfs pull
 $ zstd --rm -d ~/hl-testnet-genesis/*.zst
 
 # Now return to where you have cloned this project to continue
