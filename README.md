@@ -18,7 +18,7 @@ Building NanoReth from source requires Rust and Cargo to be installed:
 
 The current state of the block files comprise of millions of small objects totalling over 20 Gigs and counting. The "requester pays" option means you will need a configured aws environment, and you could incur charges which varies according to destination (ec2 versus local).
 
-1) this will backfill the existing blocks from HyperLiquid's EVM S3 bucket:
+1) this will backfill the existing blocks from Hyperliquid's EVM S3 bucket:
 
     ```shell                                  
     aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks \
