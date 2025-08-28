@@ -20,6 +20,13 @@ The current state of the block files comprise of millions of small objects total
 
 1) this will backfill the existing blocks from Hyperliquid's EVM S3 bucket:
 
+    > use our rust based s3 tool wrapper to optimize your download experience - [read more](./etc/evm-block-sync/README.md)
+    ```shell
+    chmod +x ./etc/evm-block-sync/s3sync-runner.sh
+    ./etc/evm-block-sync/s3sync-runner.sh
+    ```
+
+    > or use the conventional [aws cli](https://aws.amazon.com/cli/)
     ```shell                                  
     aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks \
       --request-payer requester \
@@ -27,17 +34,17 @@ The current state of the block files comprise of millions of small objects total
       --size-only \                        
       --only-show-errors
     ```
-    > consider using this [rust based s3 tool wrapper](https://github.com/wwwehr/hl-evm-block-sync) alternative to optimize your download experience
 
-2) `$ make install` - this will install the NanoReth binary.
 
-3) Start NanoReth which will begin syncing using the blocks in `~/evm-blocks`:
+1) `$ make install` - this will install the NanoReth binary.
+
+2) Start NanoReth which will begin syncing using the blocks in `~/evm-blocks`:
 
     ```sh
     $ reth node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 --ingest-dir ~/evm-blocks --ws.port 8545
     ```
 
-4) Once the node logs stops making progress this means it's caught up with the existing blocks.
+3) Once the node logs stops making progress this means it's caught up with the existing blocks.
 
     Stop the NanoReth process and then start Goofys: `$ goofys --region=ap-northeast-1 --requester-pays hl-mainnet-evm-blocks evm-blocks`
 
