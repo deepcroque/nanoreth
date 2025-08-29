@@ -16,17 +16,35 @@ Building NanoReth from source requires Rust and Cargo to be installed:
 
 ## How to run (mainnet)
 
-1) `$ aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks --request-payer requester # one-time` - this will backfill the existing blocks from HyperLiquid's EVM S3 bucket.
+The current state of the block files comprise of millions of small objects totalling over 20 Gigs and counting. The "requester pays" option means you will need a configured aws environment, and you could incur charges which varies according to destination (ec2 versus local).
 
-2) `$ make install` - this will install the NanoReth binary.
+1) this will backfill the existing blocks from Hyperliquid's EVM S3 bucket:
 
-3) Start NanoReth which will begin syncing using the blocks in `~/evm-blocks`:
+    > use our rust based s3 tool wrapper to optimize your download experience - [read more](./etc/evm-block-sync/README.md)
+    ```shell
+    chmod +x ./etc/evm-block-sync/s3sync-runner.sh
+    ./etc/evm-block-sync/s3sync-runner.sh
+    ```
+
+    > or use the conventional [aws cli](https://aws.amazon.com/cli/)
+    ```shell                                  
+    aws s3 sync s3://hl-mainnet-evm-blocks/ ~/evm-blocks \
+      --request-payer requester \
+      --exact-timestamps \                  
+      --size-only \                        
+      --only-show-errors
+    ```
+
+
+1) `$ make install` - this will install the NanoReth binary.
+
+2) Start NanoReth which will begin syncing using the blocks in `~/evm-blocks`:
 
     ```sh
     $ reth node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 --ws --ws.addr 0.0.0.0 --ws.origins '*' --ws.api eth,ots,net,web3 --ingest-dir ~/evm-blocks --ws.port 8545
     ```
 
-4) Once the node logs stops making progress this means it's caught up with the existing blocks.
+3) Once the node logs stops making progress this means it's caught up with the existing blocks.
 
     Stop the NanoReth process and then start Goofys: `$ goofys --region=ap-northeast-1 --requester-pays hl-mainnet-evm-blocks evm-blocks`
 
@@ -65,11 +83,24 @@ $ reth node --http --http.addr 0.0.0.0 --http.api eth,ots,net,web3 \
 
 Testnet is supported since block 21304281.
 
+> [!NOTE]
+> To run testnet locally, you will need:
+> - [ ] [git lfs](https://git-lfs.com/)
+> - [ ] [rust toolchain](https://rustup.rs/)
+
 ```sh
 # Get testnet genesis at block 21304281
 $ cd ~
 $ git clone https://github.com/sprites0/hl-testnet-genesis
+$ git -C hl-testnet-genesis lfs pull
 $ zstd --rm -d ~/hl-testnet-genesis/*.zst
+
+# Now return to where you have cloned this project to continue
+$ cd -
+
+# prepare your rust toolchain
+$ rustup install 1.82 # (this corresponds with rust version in our Cargo.toml)
+$ rustup default 1.82
 
 # Init node
 $ make install
