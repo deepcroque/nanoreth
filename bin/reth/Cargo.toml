@@ -35,6 +35,7 @@ reth-cli-runner.workspace = true
 reth-cli-commands.workspace = true
 reth-cli-util.workspace = true
 reth-consensus-common.workspace = true
+reth-hlfs.workspace = true
 reth-rpc-builder.workspace = true
 reth-rpc.workspace = true
 reth-rpc-types-compat.workspace = true
@@ -81,8 +82,9 @@ tracing.workspace = true
 serde_json.workspace = true
 
 # async
-tokio = { workspace = true, features = ["sync", "macros", "time", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["sync", "macros", "time", "rt-multi-thread", "net", "fs"] }
 futures.workspace = true
+futures-util.workspace = true
 
 # time
 time = { workspace = true }

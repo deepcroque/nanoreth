@@ -29,6 +29,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 use crate::serialized::{BlockAndReceipts, EvmBlock};
+use crate::share_blocks::ShareBlocks;
 use crate::spot_meta::erc20_contract_to_spot_token;
 
 /// Poll interval when tailing an *open* hourly file.
@@ -41,6 +42,7 @@ pub(crate) struct BlockIngest {
     pub local_ingest_dir: Option<PathBuf>,
     pub local_blocks_cache: Arc<Mutex<BTreeMap<u64, BlockAndReceipts>>>, // height → block
     pub precompiles_cache: PrecompilesCache,
+    pub hlfs: Option<ShareBlocks>,
 }
 
 #[derive(Deserialize)]
@@ -155,9 +157,9 @@ impl BlockIngest {
         if let Some(block) = self.try_collect_local_block(height).await {
             info!("Returning locally synced block for @ Height [{height}]");
             return Some(block);
-        } else {
-            self.try_collect_s3_block(height)
         }
+
+        self.try_collect_s3_block(height)
     }
 
     pub(crate) fn try_collect_s3_block(&self, height: u64) -> Option<BlockAndReceipts> {

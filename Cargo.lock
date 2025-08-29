@@ -6659,6 +6659,7 @@ dependencies = [
  "clap",
  "eyre",
  "futures",
+ "futures-util",
  "jsonrpsee",
  "jsonrpsee-core",
  "lz4_flex",
@@ -6687,6 +6688,7 @@ dependencies = [
  "reth-execution-types",
  "reth-exex",
  "reth-fs-util",
+ "reth-hlfs",
  "reth-hyperliquid-types",
  "reth-network",
  "reth-network-api",
@@ -7964,6 +7966,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.11",
+]
+
+[[package]]
+name = "reth-hlfs"
+version = "1.2.0"
+dependencies = [
+ "bytes",
+ "parking_lot",
+ "rand 0.8.5",
+ "reth-tracing",
+ "tempfile",
+ "thiserror 2.0.11",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
